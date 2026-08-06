@@ -175,16 +175,27 @@ public class FooterStatusDisplayItem extends StatusDisplayItem{
 			if(Build.VERSION.SDK_INT < Build.VERSION_CODES.S || item.status.preview || item.status.content == null)
 				return false;
 			if(item.status.language==null || item.status.language.isBlank()){
-				TextLanguage detectedLanguage=itemView.getContext().getSystemService(TextClassificationManager.class)
-						.getTextClassifier().detectLanguage(new TextLanguage.Request.Builder(item.status.getStrippedText()).build());
-				if(detectedLanguage.getLocaleHypothesisCount()==0 || detectedLanguage.getConfidenceScore(detectedLanguage.getLocale(0))<0.75f)
+				item.status.language=detectPostLanguage(item.status.getStrippedText());
+				if(item.status.language==null)
 					return false;
-				item.status.language=detectedLanguage.getLocale(0).toLanguageTag();
 			}
 			Locale targetLocale=Build.VERSION.SDK_INT >= Build.VERSION_CODES.N
 					? itemView.getResources().getConfiguration().getLocales().get(0)
 					: Locale.getDefault();
 			return !item.status.language.isBlank() && !item.status.language.equalsIgnoreCase(targetLocale.getLanguage());
+		}
+
+		private String detectPostLanguage(String text){
+			try{
+				TextLanguage detectedLanguage=itemView.getContext().getSystemService(TextClassificationManager.class)
+						.getTextClassifier().detectLanguage(new TextLanguage.Request.Builder(text).build());
+				if(detectedLanguage.getLocaleHypothesisCount()>0 && detectedLanguage.getConfidenceScore(detectedLanguage.getLocale(0))>=0.75f)
+					return detectedLanguage.getLocale(0).toLanguageTag();
+			}catch(RuntimeException ignored){}
+
+			// Some federated servers omit the Mastodon `language` field. Korean text remains
+			// unambiguous even when the system language classifier has no downloaded model.
+			return text.codePoints().anyMatch(c->Character.UnicodeScript.of(c)==Character.UnicodeScript.HANGUL) ? "ko" : null;
 		}
 
 		private void bindText(TextView btn, long count){
