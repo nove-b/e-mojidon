@@ -192,10 +192,7 @@ public class FooterStatusDisplayItem extends StatusDisplayItem{
 				if(detectedLanguage.getLocaleHypothesisCount()>0 && detectedLanguage.getConfidenceScore(detectedLanguage.getLocale(0))>=0.75f)
 					return detectedLanguage.getLocale(0).toLanguageTag();
 			}catch(RuntimeException ignored){}
-
-			// Some federated servers omit the Mastodon `language` field. Korean text remains
-			// unambiguous even when the system language classifier has no downloaded model.
-			return text.codePoints().anyMatch(c->Character.UnicodeScript.of(c)==Character.UnicodeScript.HANGUL) ? "ko" : null;
+			return null;
 		}
 
 		private void bindText(TextView btn, long count){
