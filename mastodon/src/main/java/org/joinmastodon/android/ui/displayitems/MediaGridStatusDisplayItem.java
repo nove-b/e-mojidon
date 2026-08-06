@@ -10,6 +10,7 @@ import android.app.Activity;
 import android.graphics.Rect;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
+import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.LayerDrawable;
 import android.text.TextUtils;
 import android.util.Pair;
@@ -21,6 +22,7 @@ import android.view.ViewTreeObserver;
 import android.widget.FrameLayout;
 import android.widget.ImageButton;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import org.joinmastodon.android.R;
@@ -37,7 +39,7 @@ import org.joinmastodon.android.ui.utils.MediaAttachmentViewController;
 import org.joinmastodon.android.ui.utils.UiUtils;
 import org.joinmastodon.android.ui.views.FrameLayoutThatOnlyMeasuresFirstChild;
 import org.joinmastodon.android.ui.views.MaxWidthFrameLayout;
-import org.joinmastodon.android.ui.views.MediaGridLayout;
+import org.joinmastodon.android.ui.views.MediaSliderLayout;
 import org.joinmastodon.android.utils.TypedObjectPool;
 
 import java.util.ArrayList;
@@ -102,7 +104,7 @@ public class MediaGridStatusDisplayItem extends StatusDisplayItem{
 
 	public static class Holder extends StatusDisplayItem.Holder<MediaGridStatusDisplayItem> implements ImageLoaderViewHolder{
 		private final FrameLayout wrapper;
-		private final MediaGridLayout layout;
+		private final MediaSliderLayout layout;
 		private final View.OnClickListener clickListener=this::onViewClick, altTextClickListener=this::onAltTextClick;
 		private final ArrayList<MediaAttachmentViewController> controllers=new ArrayList<>();
 
@@ -110,6 +112,9 @@ public class MediaGridStatusDisplayItem extends StatusDisplayItem{
 		private final FrameLayout altTextWrapper;
 		private final TextView altTextButton;
 		private final ImageView noAltTextButton;
+		private final LinearLayout pageIndicator;
+		private final ImageButton previousPage, nextPage;
+		private final ArrayList<View> pageDots=new ArrayList<>();
 		private final View altTextScroller;
 		private final ImageButton altTextClose;
 		private final TextView altText, noAltText;
@@ -126,7 +131,7 @@ public class MediaGridStatusDisplayItem extends StatusDisplayItem{
 		public Holder(Activity activity, ViewGroup parent){
 			super(new FrameLayoutThatOnlyMeasuresFirstChild(activity));
 			wrapper=(FrameLayout)itemView;
-			layout=new MediaGridLayout(activity);
+			layout=new MediaSliderLayout(activity);
 			wrapper.addView(layout);
 			wrapper.setClipToPadding(false);
 
@@ -143,6 +148,17 @@ public class MediaGridStatusDisplayItem extends StatusDisplayItem{
 			altText=findViewById(R.id.alt_text);
 			noAltText=findViewById(R.id.no_alt_text);
 			altTextClose.setOnClickListener(this::onAltTextCloseClick);
+			pageIndicator=new LinearLayout(activity);
+			pageIndicator.setGravity(Gravity.CENTER);
+			pageIndicator.setPadding(V.dp(8), V.dp(6), V.dp(8), V.dp(6));
+			overlays.addView(pageIndicator, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL|Gravity.BOTTOM));
+			previousPage=createPageButton(activity, false);
+			nextPage=createPageButton(activity, true);
+			overlays.addView(previousPage, new FrameLayout.LayoutParams(V.dp(40), V.dp(40), Gravity.START|Gravity.CENTER_VERTICAL));
+			overlays.addView(nextPage, new FrameLayout.LayoutParams(V.dp(40), V.dp(40), Gravity.END|Gravity.CENTER_VERTICAL));
+			previousPage.setOnClickListener(v->layout.scrollToPage(layout.getScrollX()/layout.getWidth()-1));
+			nextPage.setOnClickListener(v->layout.scrollToPage(layout.getScrollX()/layout.getWidth()+1));
+			layout.setOnPageChangedListener(page->updatePageIndicator(page));
 
 			// megalodon: no sensitive hide button because the visibility toggle looks prettier imo
 //			hideSensitiveButton=(FrameLayout) activity.getLayoutInflater().inflate(R.layout.alt_text_badge, overlays, false);
@@ -168,11 +184,13 @@ public class MediaGridStatusDisplayItem extends StatusDisplayItem{
 			if(altTextAnimator!=null)
 				altTextAnimator.cancel();
 
-			layout.setTiledLayout(item.tiledLayout);
+			Attachment firstAttachment=item.attachments.get(0);
+			layout.setAspectRatio(firstAttachment.getWidth()/(float) firstAttachment.getHeight());
 			for(MediaAttachmentViewController c:controllers){
 				item.viewPool.reuse(c.type, c);
 			}
-			layout.removeAllViews();
+			layout.clearSlides();
+			layout.scrollTo(0, 0);
 			controllers.clear();
 
 			int i=0;
@@ -184,11 +202,7 @@ public class MediaGridStatusDisplayItem extends StatusDisplayItem{
 					case GIFV -> GridItemType.GIFV;
 					default -> throw new IllegalStateException("Unexpected value: "+att.type);
 				});
-				if(c.view.getLayoutParams()==null)
-					c.view.setLayoutParams(new MediaGridLayout.LayoutParams(item.tiledLayout.tiles[i]));
-				else
-					((MediaGridLayout.LayoutParams) c.view.getLayoutParams()).tile=item.tiledLayout.tiles[i];
-				layout.addView(c.view);
+				layout.addSlide(c.view);
 				c.view.setOnClickListener(clickListener);
 				c.view.setTag(i);
 				if(c.btnsWrap!=null){
@@ -223,6 +237,11 @@ public class MediaGridStatusDisplayItem extends StatusDisplayItem{
 			noAltTextButton.setVisibility(View.VISIBLE);
 			altTextWrapper.setVisibility(View.GONE);
 			altTextIndex=-1;
+			pageIndicator.setVisibility(item.attachments.size()>1 ? View.VISIBLE : View.GONE);
+			previousPage.setVisibility(item.attachments.size()>1 ? View.VISIBLE : View.GONE);
+			nextPage.setVisibility(item.attachments.size()>1 ? View.VISIBLE : View.GONE);
+			buildPageIndicator();
+			updatePageIndicator(0);
 
 			if(!item.status.sensitiveRevealed){
 				sensitiveOverlay.setVisibility(View.VISIBLE);
@@ -253,7 +272,8 @@ public class MediaGridStatusDisplayItem extends StatusDisplayItem{
 				metadata.width=drawable.getIntrinsicWidth();
 				metadata.height=drawable.getIntrinsicHeight();
 				item.attachments.get(index).meta=metadata;
-				item.tiledLayout=PhotoLayoutHelper.processThumbs(item.attachments);
+				Attachment firstAttachment=item.attachments.get(0);
+				layout.setAspectRatio(firstAttachment.getWidth()/(float) firstAttachment.getHeight());
 				UiUtils.beginLayoutTransition((ViewGroup) itemView);
 				rebind();
 			}
@@ -268,6 +288,49 @@ public class MediaGridStatusDisplayItem extends StatusDisplayItem{
 		private void onViewClick(View v){
 			int index=(Integer)v.getTag();
 			((PhotoViewerHost) item.parentFragment).openPhotoViewer(item.parentID, item.status, index, this);
+		}
+
+		private void updatePageIndicator(int page){
+			for(int i=0;i<pageDots.size();i++){
+				boolean selected=i==page;
+				View dot=pageDots.get(i);
+				LinearLayout.LayoutParams params=(LinearLayout.LayoutParams) dot.getLayoutParams();
+				params.width=V.dp(selected ? 16 : 6);
+				dot.setLayoutParams(params);
+				GradientDrawable background=(GradientDrawable) dot.getBackground();
+				background.setColor(selected ? 0xFFFFFFFF : 0x99FFFFFF);
+			}
+			previousPage.setAlpha(page>0 ? 1f : 0.35f);
+			nextPage.setAlpha(item!=null && page<item.attachments.size()-1 ? 1f : 0.35f);
+		}
+
+		private ImageButton createPageButton(Activity activity, boolean next){
+			ImageButton button=new ImageButton(activity);
+			button.setImageResource(R.drawable.ic_fluent_arrow_left_24_regular);
+			button.setImageTintList(android.content.res.ColorStateList.valueOf(0xFFFFFFFF));
+			if(next) button.setRotation(180);
+			GradientDrawable background=new GradientDrawable();
+			background.setShape(GradientDrawable.OVAL);
+			background.setColor(0x66000000);
+			button.setBackground(background);
+			button.setContentDescription(activity.getString(next ? R.string.next : R.string.back));
+			return button;
+		}
+
+		private void buildPageIndicator(){
+			pageIndicator.removeAllViews();
+			pageDots.clear();
+			for(int i=0;i<item.attachments.size();i++){
+				View dot=new View(pageIndicator.getContext());
+				GradientDrawable background=new GradientDrawable();
+				background.setShape(GradientDrawable.RECTANGLE);
+				background.setCornerRadius(V.dp(3));
+				dot.setBackground(background);
+				LinearLayout.LayoutParams params=new LinearLayout.LayoutParams(V.dp(6), V.dp(6));
+				params.setMargins(V.dp(3), 0, V.dp(3), 0);
+				pageIndicator.addView(dot, params);
+				pageDots.add(dot);
+			}
 		}
 
 		private void onAltTextClick(View v){
@@ -440,7 +503,7 @@ public class MediaGridStatusDisplayItem extends StatusDisplayItem{
 			V.setVisibilityAnimated(sensitiveOverlay, View.VISIBLE, ()->layout.setVisibility(View.INVISIBLE));
 		}
 
-		public MediaGridLayout getLayout(){
+		public MediaSliderLayout getLayout(){
 			return layout;
 		}
 
