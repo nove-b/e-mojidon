@@ -24,6 +24,22 @@
 				android:paddingHorizontal="15dp">
 
 				<FrameLayout
+					android:id="@+id/translate_btn"
+					android:layout_weight="1"
+					android:layout_width="0dp"
+					android:layout_height="match_parent">
+					<ImageView
+						android:id="@+id/translate"
+						android:layout_width="24dp"
+						android:layout_height="24dp"
+						android:layout_gravity="center_vertical"
+						android:layout_margin="12dp"
+						android:duplicateParentState="true"
+						android:src="@drawable/ic_translate"
+						android:tint="?colorM3OnSurfaceVariant" />
+				</FrameLayout>
+
+				<FrameLayout
 					android:layout_weight="1"
 					android:layout_width="0dp"
 					android:layout_height="match_parent">

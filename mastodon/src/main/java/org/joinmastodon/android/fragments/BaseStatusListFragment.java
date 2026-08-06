@@ -7,13 +7,23 @@ import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
+import android.icu.util.ULocale;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.CancellationSignal;
 import android.util.Pair;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowInsets;
 import android.view.animation.TranslateAnimation;
+import android.view.translation.TranslationContext;
+import android.view.translation.TranslationManager;
+import android.view.translation.TranslationRequest;
+import android.view.translation.TranslationRequestValue;
+import android.view.translation.TranslationResponse;
+import android.view.translation.TranslationResponseValue;
+import android.view.translation.TranslationSpec;
+import android.view.translation.Translator;
 import android.widget.ImageButton;
 import android.widget.Toolbar;
 
@@ -1082,41 +1092,54 @@ public abstract class BaseStatusListFragment<T extends DisplayItemsParent> exten
 				if(status.translation!=null){
 					status.translationState=Status.TranslationState.SHOWN;
 				}else{
-					status.translationState=Status.TranslationState.LOADING;
-					Consumer<Translation> successCallback=(result)->{
-						status.translation=result;
-						status.translationState=Status.TranslationState.SHOWN;
-						updateTranslation(itemID);
-					};
-					MastodonAPIRequest<?> req=isInstanceAkkoma()
-							? new AkkomaTranslateStatus(status.getContentStatus().id, Locale.getDefault().getLanguage()).setCallback(new Callback<>(){
-								@Override
-								public void onSuccess(AkkomaTranslation result){
-									if(getActivity()!=null) successCallback.accept(result.toTranslation());
-								}
-								@Override
-								public void onError(ErrorResponse error){
-									if(getActivity()!=null) translationCallbackError(status, itemID);
-								}
-							})
-							: new TranslateStatus(status.getContentStatus().id, Locale.getDefault().getLanguage()).setCallback(new Callback<>(){
-								@Override
-								public void onSuccess(Translation result){
-									if(getActivity()!=null) successCallback.accept(result);
-								}
-
-								@Override
-								public void onError(ErrorResponse error){
-									if(getActivity()!=null) translationCallbackError(status, itemID);
-								}
-							});
-
-					// 1 minute
-					req.setTimeout(60000).exec(accountID);
+					translateWithAndroidApi(status, itemID);
 				}
 			}
 		}
 		updateTranslation(itemID);
+	}
+
+	private void translateWithAndroidApi(Status status, String itemID){
+		if(Build.VERSION.SDK_INT < Build.VERSION_CODES.S || getActivity()==null || status.language==null){
+			translationCallbackError(status, itemID);
+			return;
+		}
+		status.translationState=Status.TranslationState.LOADING;
+		Locale targetLocale=getResources().getConfiguration().getLocales().get(0);
+		TranslationContext context=new TranslationContext.Builder(
+				new TranslationSpec(ULocale.forLanguageTag(status.language), TranslationSpec.DATA_FORMAT_TEXT),
+				new TranslationSpec(ULocale.forLocale(targetLocale), TranslationSpec.DATA_FORMAT_TEXT)
+		).setTranslationFlags(TranslationContext.FLAG_LOW_LATENCY).build();
+		TranslationManager manager=getActivity().getSystemService(TranslationManager.class);
+		manager.createOnDeviceTranslator(context, getActivity().getMainExecutor(), translator -> {
+			if(translator==null || getActivity()==null){
+				translationCallbackError(status, itemID);
+				return;
+			}
+			TranslationRequest request=new TranslationRequest.Builder()
+					.setTranslationRequestValues(List.of(TranslationRequestValue.forText(status.getStrippedText())))
+					.build();
+			translator.translate(request, new CancellationSignal(), getActivity().getMainExecutor(), response -> {
+				try{
+					TranslationResponseValue value=response.getTranslationResponseValues().size()>0
+							? response.getTranslationResponseValues().valueAt(0) : null;
+					if(getActivity()==null || response.getTranslationStatus()!=TranslationResponse.TRANSLATION_STATUS_SUCCESS
+							|| value==null || value.getStatusCode()!=TranslationResponseValue.STATUS_SUCCESS || value.getText()==null){
+						translationCallbackError(status, itemID);
+						return;
+					}
+					Translation translation=new Translation();
+					translation.content=value.getText().toString();
+					translation.detectedSourceLanguage=status.language;
+					translation.provider="Android";
+					status.translation=translation;
+					status.translationState=Status.TranslationState.SHOWN;
+					updateTranslation(itemID);
+				}finally{
+					translator.destroy();
+				}
+			});
+		});
 	}
 
 	private void translationCallbackError(Status status, String itemID) {
@@ -1124,7 +1147,7 @@ public abstract class BaseStatusListFragment<T extends DisplayItemsParent> exten
 		updateTranslation(itemID);
 		new M3AlertDialogBuilder(getActivity())
 				.setTitle(R.string.error)
-				.setMessage(R.string.translation_failed)
+				.setMessage(R.string.android_translation_failed)
 				.setPositiveButton(R.string.ok, null)
 				.show();
 	}

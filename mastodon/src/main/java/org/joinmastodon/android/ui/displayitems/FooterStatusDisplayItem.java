@@ -21,6 +21,8 @@ import android.view.animation.AlphaAnimation;
 import android.view.animation.Animation;
 import android.view.animation.AnimationSet;
 import android.view.animation.RotateAnimation;
+import android.view.textclassifier.TextClassificationManager;
+import android.view.textclassifier.TextLanguage;
 import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
@@ -40,6 +42,7 @@ import org.joinmastodon.android.ui.utils.UiUtils;
 import org.parceler.Parcels;
 
 import java.util.function.Consumer;
+import java.util.Locale;
 
 import me.grishka.appkit.Nav;
 import me.grishka.appkit.utils.CubicBezierInterpolator;
@@ -62,7 +65,7 @@ public class FooterStatusDisplayItem extends StatusDisplayItem{
 
 	public static class Holder extends StatusDisplayItem.Holder<FooterStatusDisplayItem>{
 		private final TextView replies, boosts, favorites;
-		private final View reply, boost, favorite, share, bookmark;
+		private final View translate, reply, boost, favorite, share, bookmark;
 		private final ImageView favIcon;
 		private static Animation spin;
 
@@ -100,6 +103,7 @@ public class FooterStatusDisplayItem extends StatusDisplayItem{
 			boosts=findViewById(R.id.boost);
 			favorites=findViewById(R.id.favorite);
 
+			translate=findViewById(R.id.translate_btn);
 			reply=findViewById(R.id.reply_btn);
 			boost=findViewById(R.id.boost_btn);
 			favorite=findViewById(R.id.favorite_btn);
@@ -107,6 +111,9 @@ public class FooterStatusDisplayItem extends StatusDisplayItem{
 			bookmark=findViewById(R.id.bookmark_btn);
 			favIcon=findViewById(R.id.favorite_icon);
 
+			translate.setOnTouchListener(this::onButtonTouch);
+			translate.setOnClickListener(this::onTranslateClick);
+			translate.setAccessibilityDelegate(buttonAccessibilityDelegate);
 			reply.setOnTouchListener(this::onButtonTouch);
 			reply.setOnClickListener(this::onReplyClick);
 			reply.setOnLongClickListener(this::onReplyLongClick);
@@ -131,6 +138,7 @@ public class FooterStatusDisplayItem extends StatusDisplayItem{
 
 		@Override
 		public void onBind(FooterStatusDisplayItem item){
+			translate.setVisibility(canTranslateWithAndroid(item) ? View.VISIBLE : View.GONE);
 			bindText(replies, item.status.repliesCount);
 			bindText(boosts, item.status.reblogsCount);
 			bindText(favorites, item.status.favouritesCount);
@@ -161,6 +169,22 @@ public class FooterStatusDisplayItem extends StatusDisplayItem{
 					condenseBottom ? V.dp(-5) : 0);
 
 			itemView.requestLayout();
+		}
+
+		private boolean canTranslateWithAndroid(FooterStatusDisplayItem item){
+			if(Build.VERSION.SDK_INT < Build.VERSION_CODES.S || item.status.preview || item.status.content == null)
+				return false;
+			if(item.status.language==null || item.status.language.isBlank()){
+				TextLanguage detectedLanguage=itemView.getContext().getSystemService(TextClassificationManager.class)
+						.getTextClassifier().detectLanguage(new TextLanguage.Request.Builder(item.status.getStrippedText()).build());
+				if(detectedLanguage.getLocaleHypothesisCount()==0 || detectedLanguage.getConfidenceScore(detectedLanguage.getLocale(0))<0.75f)
+					return false;
+				item.status.language=detectedLanguage.getLocale(0).toLanguageTag();
+			}
+			Locale targetLocale=Build.VERSION.SDK_INT >= Build.VERSION_CODES.N
+					? itemView.getResources().getConfiguration().getLocales().get(0)
+					: Locale.getDefault();
+			return !item.status.language.isBlank() && !item.status.language.equalsIgnoreCase(targetLocale.getLanguage());
 		}
 
 		private void bindText(TextView btn, long count){
@@ -203,6 +227,12 @@ public class FooterStatusDisplayItem extends StatusDisplayItem{
 				UiUtils.opacityIn(v);
 				openComposeView(status, item.accountID);
 			});
+		}
+
+		private void onTranslateClick(View v){
+			if(item.status.preview) return;
+			UiUtils.opacityIn(v);
+			item.parentFragment.togglePostTranslation(item.status, item.parentID);
 		}
 
 		private boolean onReplyLongClick(View v) {
@@ -421,6 +451,8 @@ public class FooterStatusDisplayItem extends StatusDisplayItem{
 		}
 
 		private int descriptionForId(int id){
+			if(id==R.id.translate_btn)
+				return R.string.sk_translate_post;
 			if(id==R.id.reply_btn)
 				return R.string.button_reply;
 			if(id==R.id.boost_btn)

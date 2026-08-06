@@ -530,6 +530,7 @@
 	<string name="post_translated">%2$s による %1$s からの翻訳</string>
 	<string name="translation_show_original">原文を表示</string>
 	<string name="translation_failed">翻訳に失敗しました。このサーバーは翻訳機能を有効にしていないか、翻訳機能のない旧バージョンの Mastodon を実行しているのかもしれません。</string>
+	<string name="android_translation_failed">翻訳を利用できません。Android のオンデバイス翻訳サービスを有効にしてから、もう一度お試しください。</string>
 	<string name="settings_privacy">プライバシーとつながりやすさ</string>
 	<string name="settings_discoverable">アカウントを見つけやすくする</string>
 	<string name="settings_indexable">公開投稿を検索できるようにする</string>

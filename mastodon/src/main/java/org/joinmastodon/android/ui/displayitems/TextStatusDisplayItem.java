@@ -194,7 +194,8 @@ public class TextStatusDisplayItem extends StatusDisplayItem{
 		public void updateTranslation(boolean updateText){
 			if(item.status==null)
 				return;
-			boolean translateEnabled=!item.disableTranslate && item.status.isEligibleForTranslation(item.parentFragment.getSession()) && !item.isForQuote;
+			// Translation is exposed from the action bar; the inline footer is intentionally unused.
+			boolean translateEnabled=false;
 			if(translationFooter==null && translateEnabled){
 				translationFooter=translationFooterStub.inflate();
 				translationInfo=findViewById(R.id.translation_info_text);
@@ -202,6 +203,17 @@ public class TextStatusDisplayItem extends StatusDisplayItem{
 				translationButtonWrap=findViewById(R.id.translation_btn_wrap);
 				translationProgress=findViewById(R.id.translation_progress);
 				translationButton.setOnClickListener(v->item.parentFragment.togglePostTranslation(item.status, item.parentID));
+			}
+			if(translationFooter==null){
+				if(updateText){
+					if(item.status.translationState==Status.TranslationState.SHOWN && item.status.translation!=null){
+						if(item.translatedText==null) item.setTranslatedText(item.status.translation.content);
+						text.setText(item.translatedText);
+					}else{
+						text.setText(item.text);
+					}
+				}
+				return;
 			}
 			if(translationButton!=null) translationButton.animate().cancel();
 			if(item.status.translationState==Status.TranslationState.HIDDEN){
