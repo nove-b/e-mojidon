@@ -28,23 +28,34 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Read the application version
+      - name: Resolve an unpublished application version
         id: version
-        run: |
-          VERSION=$(sed -nE 's/^[[:space:]]*versionName[[:space:]]+"([^"]+)".*/\1/p' mastodon/build.gradle | head -n 1)
-          test -n "$VERSION"
-          echo "name=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
-
-      - name: Ensure this version has not already been published
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ steps.version.outputs.tag }}
         run: |
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "A release for $TAG already exists. Increase mastodon/build.gradle versionName before publishing again." >&2
+          VERSION_TEMPLATE=$(sed -nE 's/^[[:space:]]*versionName[[:space:]]+"([^"]+)".*/\1/p' mastodon/build.gradle | head -n 1)
+          if [[ ! "$VERSION_TEMPLATE" =~ ^(.*\+fork\.)([0-9]+)(\.moshinda)$ ]]; then
+            echo "Unsupported release version format: $VERSION_TEMPLATE" >&2
             exit 1
           fi
+
+          PREFIX="${BASH_REMATCH[1]}"
+          NUMBER="${BASH_REMATCH[2]}"
+          SUFFIX="${BASH_REMATCH[3]}"
+          while :; do
+            VERSION="${PREFIX}${NUMBER}${SUFFIX}"
+            TAG="v$VERSION"
+            if ! gh release view "$TAG" >/dev/null 2>&1; then
+              break
+            fi
+            NUMBER=$((NUMBER + 1))
+          done
+
+          sed -i -E "s/^[[:space:]]*versionCode[[:space:]]+.*/\t\tversionCode $NUMBER/" mastodon/build.gradle
+          sed -i -E "s|^[[:space:]]*versionName[[:space:]]+.*|\t\tversionName \"$VERSION\"|" mastodon/build.gradle
+          echo "Publishing $VERSION (versionCode $NUMBER)"
+          echo "name=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
       - name: Restore the release signing key
         env:
