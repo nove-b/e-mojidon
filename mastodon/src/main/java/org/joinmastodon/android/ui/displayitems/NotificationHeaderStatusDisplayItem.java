@@ -73,7 +73,7 @@ public class NotificationHeaderStatusDisplayItem extends StatusDisplayItem{
 				case UPDATE -> R.string.sk_post_edited;
 				case SIGN_UP -> R.string.sk_signed_up;
 				case REPORT -> R.string.sk_reported;
-				case REACTION, PLEROMA_EMOJI_REACTION ->
+				case REACTION, EMOJI_REACTION, PLEROMA_EMOJI_REACTION ->
 						!TextUtils.isEmpty(notification.emoji) ? R.string.sk_reacted_with : R.string.sk_reacted;
 				default -> throw new IllegalStateException("Unexpected value: "+notification.type);
 			});
@@ -169,7 +169,7 @@ public class NotificationHeaderStatusDisplayItem extends StatusDisplayItem{
 				case REPORT -> R.drawable.ic_fluent_warning_24_filled;
 				case SIGN_UP -> R.drawable.ic_fluent_person_available_24_filled;
 				case UPDATE -> R.drawable.ic_fluent_edit_24_filled;
-				case REACTION, PLEROMA_EMOJI_REACTION -> R.drawable.ic_fluent_add_24_filled;
+				case REACTION, EMOJI_REACTION, PLEROMA_EMOJI_REACTION -> R.drawable.ic_fluent_add_24_filled;
 				default -> throw new IllegalStateException("Unexpected value: "+item.notification.type);
 			});
 			icon.setImageTintList(ColorStateList.valueOf(UiUtils.getThemeColor(item.parentFragment.getActivity(), switch(item.notification.type){
