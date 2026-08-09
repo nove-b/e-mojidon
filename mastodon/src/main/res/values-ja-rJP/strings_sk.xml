@@ -378,6 +378,8 @@
     <string name="sk_in_reply">返信</string>
     <string name="sk_settings_confirm_before_reblog">ブーストする前に確認</string>
     <string name="sk_settings_emoji_reactions_explanation">投稿に対する絵文字リアクションを表示、追加することができます。様々なFediverseサーバーがこれに対応していますが、Mastodonは対応していません。</string>
+    <string name="sk_emoji_reactions_unsupported_title">絵文字リアクションは利用できません</string>
+    <string name="sk_emoji_reactions_unsupported_message">この投稿のインスタンスは絵文字リアクションに対応していません。代わりにお気に入りにしますか？</string>
     <string name="sk_recently_used">最近使用</string>
     <string name="sk_button_mutuals">相互フォロー中</string>
     <string name="sk_notify_poll_results">投票結果</string>

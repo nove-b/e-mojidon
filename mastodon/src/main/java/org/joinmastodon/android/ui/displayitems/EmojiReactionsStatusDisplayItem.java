@@ -6,6 +6,7 @@ import android.content.Context;
 import android.graphics.Paint;
 import android.graphics.drawable.Animatable;
 import android.graphics.drawable.Drawable;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.util.DisplayMetrics;
@@ -27,6 +28,7 @@ import org.joinmastodon.android.R;
 import org.joinmastodon.android.api.MastodonAPIRequest;
 import org.joinmastodon.android.api.requests.announcements.AddAnnouncementReaction;
 import org.joinmastodon.android.api.requests.announcements.DeleteAnnouncementReaction;
+import org.joinmastodon.android.api.requests.instance.GetInstance;
 import org.joinmastodon.android.api.requests.statuses.AddStatusReaction;
 import org.joinmastodon.android.api.requests.statuses.DeleteStatusReaction;
 import org.joinmastodon.android.api.requests.statuses.PleromaAddStatusReaction;
@@ -42,6 +44,7 @@ import org.joinmastodon.android.model.EmojiReaction;
 import org.joinmastodon.android.model.Instance;
 import org.joinmastodon.android.model.Status;
 import org.joinmastodon.android.ui.CustomEmojiPopupKeyboard;
+import org.joinmastodon.android.ui.M3AlertDialogBuilder;
 import org.joinmastodon.android.ui.sheets.EmojiReactionDetailsSheet;
 import org.joinmastodon.android.ui.utils.TextDrawable;
 import org.joinmastodon.android.ui.utils.UiUtils;
@@ -247,14 +250,56 @@ public class EmojiReactionsStatusDisplayItem extends StatusDisplayItem {
 
 		@Override
 		public void onEmojiSelected(Emoji emoji) {
-			addEmojiReaction(emoji.shortcode, emoji);
+			addEmojiReactionIfSupported(emoji.shortcode, emoji);
 			hideEmojiKeyboard();
 		}
 
 		@Override
 		public void onEmojiSelected(String emoji){
-			addEmojiReaction(emoji, null);
+			addEmojiReactionIfSupported(emoji, null);
 			hideEmojiKeyboard();
+		}
+
+		private void addEmojiReactionIfSupported(String emoji, Emoji info){
+			runIfPostInstanceSupportsEmojiReactions(()->addEmojiReaction(emoji, info));
+		}
+
+		private void runIfPostInstanceSupportsEmojiReactions(Runnable onSupported){
+			String instanceDomain=Uri.parse(item.status.uri).getHost();
+			if(instanceDomain==null){
+				onSupported.run();
+				return;
+			}
+			new GetInstance()
+					.setCallback(new Callback<>(){
+						@Override
+						public void onSuccess(Instance postInstance){
+							if(postInstance.supportsEmojiReactions())
+								onSupported.run();
+							else
+								showFavoriteInsteadDialog();
+						}
+
+						@Override
+						public void onError(ErrorResponse error){
+							error.showToast(itemView.getContext());
+						}
+					})
+					.execNoAuth(instanceDomain);
+		}
+
+		private void showFavoriteInsteadDialog(){
+			new M3AlertDialogBuilder(itemView.getContext())
+					.setTitle(R.string.sk_emoji_reactions_unsupported_title)
+					.setMessage(R.string.sk_emoji_reactions_unsupported_message)
+					.setNegativeButton(R.string.cancel, null)
+					.setPositiveButton(R.string.button_favorite, (dialog, which)->UiUtils.lookupStatus(
+							itemView.getContext(), item.status, item.accountID, null, status->{
+								if(status!=null && !status.favourited)
+									AccountSessionManager.get(item.accountID).getStatusInteractionController()
+											.setFavorited(status, true, ignored->{});
+							}))
+					.show();
 		}
 
 		private void addEmojiReaction(String emoji, Emoji info) {
@@ -545,7 +590,7 @@ public class EmojiReactionsStatusDisplayItem extends StatusDisplayItem {
 					}
 
 					boolean deleting=reaction.me;
-					parent.createRequest(reaction.name, reaction.count, deleting, this, (status)->{
+					Runnable sendReaction=()->parent.createRequest(reaction.name, reaction.count, deleting, this, (status)->{
 						for(int i=0; i<parent.status.reactions.size(); i++){
 							EmojiReaction r=parent.status.reactions.get(i);
 							if(!r.name.equals(reaction.name)) continue;
@@ -576,6 +621,10 @@ public class EmojiReactionsStatusDisplayItem extends StatusDisplayItem {
 						E.post(new EmojiReactionsUpdatedEvent(parent.status.id, parent.status.reactions, parent.status.reactions.isEmpty(), adapter.parentHolder));
 						adapter.parentHolder.imgLoader.updateImages();
 					}, null).exec(parent.parentFragment.getAccountID());
+					if(deleting)
+						sendReaction.run();
+					else
+						adapter.parentHolder.runIfPostInstanceSupportsEmojiReactions(sendReaction);
 				});
 
 				btn.setOnLongClickListener(e->{

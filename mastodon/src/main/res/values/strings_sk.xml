@@ -362,6 +362,8 @@
     <string name="sk_settings_show_labels_in_navigation_bar">Show tab labels in the navigation bar</string>
     <string name="sk_settings_emoji_reactions">Enable emoji reactions</string>
     <string name="sk_settings_emoji_reactions_explanation">Displays emoji reactions to posts and lets you add yours. Various Fediverse servers support this, but Mastodon doesn’t.</string>
+    <string name="sk_emoji_reactions_unsupported_title">Emoji reactions aren’t supported</string>
+    <string name="sk_emoji_reactions_unsupported_message">This post’s instance doesn’t support emoji reactions. Would you like to favorite it instead?</string>
     <string name="sk_settings_show_emoji_reactions">Show emoji reactions in timelines</string>
     <string name="sk_settings_show_emoji_reactions_hide_empty">Hide empty emoji reactions</string>
     <string name="sk_settings_show_emoji_reactions_only_opened">Only when post is opened</string>
