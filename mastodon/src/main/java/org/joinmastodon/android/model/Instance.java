@@ -173,8 +173,12 @@ public class Instance extends BaseModel{
 		return version.contains("compatible; Iceshrimp "); // Iceshrimp.NET will not have a space immediately after
 	}
 
+	public boolean isMisskey() {
+		return version.contains("compatible; Misskey");
+	}
+
 	public boolean supportsEmojiReactions(){
-		return isAkkoma() || isIceshrimp()
+		return isAkkoma() || isIceshrimp() || isMisskey()
 				|| (fedibirdCapabilities!=null && fedibirdCapabilities.contains("emoji_reaction"));
 	}
 
