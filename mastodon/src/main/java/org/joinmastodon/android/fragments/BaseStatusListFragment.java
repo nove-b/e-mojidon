@@ -1100,7 +1100,8 @@ public abstract class BaseStatusListFragment<T extends DisplayItemsParent> exten
 	}
 
 	private void translateWithAndroidApi(Status status, String itemID){
-		if(Build.VERSION.SDK_INT < Build.VERSION_CODES.S || getActivity()==null || status.language==null){
+		Activity activity=getActivity();
+		if(Build.VERSION.SDK_INT < Build.VERSION_CODES.S || activity==null || status.language==null){
 			translationCallbackError(status, itemID);
 			return;
 		}
@@ -1110,20 +1111,30 @@ public abstract class BaseStatusListFragment<T extends DisplayItemsParent> exten
 				new TranslationSpec(ULocale.forLanguageTag(status.language), TranslationSpec.DATA_FORMAT_TEXT),
 				new TranslationSpec(ULocale.forLocale(targetLocale), TranslationSpec.DATA_FORMAT_TEXT)
 		).setTranslationFlags(TranslationContext.FLAG_LOW_LATENCY).build();
-		TranslationManager manager=getActivity().getSystemService(TranslationManager.class);
-		manager.createOnDeviceTranslator(context, getActivity().getMainExecutor(), translator -> {
-			if(translator==null || getActivity()==null){
+		TranslationManager manager=activity.getSystemService(TranslationManager.class);
+		if(manager==null){
+			translationCallbackError(status, itemID);
+			return;
+		}
+		manager.createOnDeviceTranslator(context, activity.getMainExecutor(), translator -> {
+			if(translator==null){
 				translationCallbackError(status, itemID);
+				return;
+			}
+			if(getActivity()==null){
+				translator.destroy();
 				return;
 			}
 			TranslationRequest request=new TranslationRequest.Builder()
 					.setTranslationRequestValues(List.of(TranslationRequestValue.forText(status.getStrippedText())))
 					.build();
-			translator.translate(request, new CancellationSignal(), getActivity().getMainExecutor(), response -> {
+			translator.translate(request, new CancellationSignal(), activity.getMainExecutor(), response -> {
 				try{
+					if(getActivity()==null)
+						return;
 					TranslationResponseValue value=response.getTranslationResponseValues().size()>0
 							? response.getTranslationResponseValues().valueAt(0) : null;
-					if(getActivity()==null || response.getTranslationStatus()!=TranslationResponse.TRANSLATION_STATUS_SUCCESS
+					if(response.getTranslationStatus()!=TranslationResponse.TRANSLATION_STATUS_SUCCESS
 							|| value==null || value.getStatusCode()!=TranslationResponseValue.STATUS_SUCCESS || value.getText()==null){
 						translationCallbackError(status, itemID);
 						return;
@@ -1144,6 +1155,8 @@ public abstract class BaseStatusListFragment<T extends DisplayItemsParent> exten
 
 	private void translationCallbackError(Status status, String itemID) {
 		status.translationState=Status.TranslationState.HIDDEN;
+		if(!isAdded() || getActivity()==null)
+			return;
 		updateTranslation(itemID);
 		new M3AlertDialogBuilder(getActivity())
 				.setTitle(R.string.error)
