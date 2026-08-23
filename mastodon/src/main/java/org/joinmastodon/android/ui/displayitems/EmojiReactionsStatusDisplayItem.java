@@ -25,6 +25,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import org.joinmastodon.android.E;
 import org.joinmastodon.android.GlobalUserPreferences;
 import org.joinmastodon.android.R;
+import org.joinmastodon.android.api.MastodonErrorResponse;
 import org.joinmastodon.android.api.MastodonAPIRequest;
 import org.joinmastodon.android.api.requests.announcements.AddAnnouncementReaction;
 import org.joinmastodon.android.api.requests.announcements.DeleteAnnouncementReaction;
@@ -282,7 +283,12 @@ public class EmojiReactionsStatusDisplayItem extends StatusDisplayItem {
 
 						@Override
 						public void onError(ErrorResponse error){
-							error.showToast(itemView.getContext());
+							// Misskey returns 404 for the Mastodon instance endpoint. It does
+							// support emoji reactions, so preserve the pre-fallback request path.
+							if(error instanceof MastodonErrorResponse mastodonError && mastodonError.httpStatus==404)
+								onSupported.run();
+							else
+								error.showToast(itemView.getContext());
 						}
 					})
 					.execNoAuth(instanceDomain);
